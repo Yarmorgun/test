@@ -1,0 +1,35 @@
+
+class StorageKeeper
+{
+	StorageKeeper();
+	~StorageKeeper();
+	Storage* m_tPassInstance;
+	friend class Storage;
+	void SetTravelPass(Storage* tPassInstance)
+	{
+		m_tPassInstance = tPassInstance;
+	}
+public:
+	static StorageKeeper& Get()
+	{
+		static StorageKeeper singleton;
+		return singleton;
+	}
+	Storage* GetTravelPass() const
+	{
+		return m_tPassInstance;
+	}
+};
+
+class Storage
+{
+public:
+	Storage()
+	{
+		StorageKeeper::Get().SetTravelPass(this);
+	}
+	~Storage()
+	{
+		StorageKeeper::Get().SetTravelPass(nullptr);
+	}
+};
