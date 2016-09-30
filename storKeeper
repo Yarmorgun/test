@@ -1,80 +1,77 @@
+
 #include <map>
 #include <thread>
 #include <mutex>
 #include <memory>
 
-
-class Storage;
-
-class StorageKeeper
+template <class T>
+class TemplateStorageKeeper
 {
-	StorageKeeper() {};
-	~StorageKeeper() {};
+	TemplateStorageKeeper() {};
+	~TemplateStorageKeeper() {};
 	std::mutex classMutex;
-	std::map<std::thread::id, Storage*> m_storages;
-	friend class Storage;
-	void AddStorage(Storage* storage)
+	std::map<std::thread::id, T*> m_storages;
+	template<class T> friend class TemplateStorage;
+	void AddStorage(T* storage)
 	{
 		std::thread::id thisThreadId = std::this_thread::get_id();
-		classMutex.lock();
-		if (m_storages.count(thisThreadId) == 0)
 		{
-			m_storages[thisThreadId] = storage;
+			std::unique_lock<std::mutex> lock(classMutex);
+			if (m_storages.count(thisThreadId) == 0)
+			{
+				m_storages[thisThreadId] = storage;
+			}
 		}
-		classMutex.unlock();
+	};
+	void RemoveStorage()
+	{
+		std::thread::id thisThreadId = std::this_thread::get_id();
+		{
+			std::unique_lock<std::mutex> lock(classMutex);
+			m_storages.erase(thisThreadId);
+		}
 	}
 public:
-	static StorageKeeper& Get()
+	static TemplateStorageKeeper& Get()
 	{
-		static StorageKeeper singleton;
+		static TemplateStorageKeeper singleton;
 		return singleton;
-	}
-	Storage* GetStorage()
+	};
+	T* GetStorage()
 	{
 		std::thread::id thisThreadId = std::this_thread::get_id();
 		return m_storages[thisThreadId];
+	};
+};
+
+template <class T>
+class TemplateStorage
+{
+public:
+	TemplateStorage()
+	{
+		TemplateStorageKeeper<T>::Get().AddStorage(static_cast<T*>(this));
+	}
+	~TemplateStorage()
+	{
+		TemplateStorageKeeper<T>::Get().RemoveStorage();
 	}
 };
 
-class Storage
+
+class Storage: public TemplateStorage<Storage>
 {
 	int someStore;
 public:
-	Storage()
+	Storage() 
 	{
 		someStore = 0;
-		StorageKeeper::Get().AddStorage(this);
 	}
-	~Storage()
-	{
-		StorageKeeper::Get().AddStorage(nullptr);
-	}
-
 	void setData(const int i) { someStore = i; };
 	int getData()const { return someStore; };
 };
 
-
-void foo()
+class Keeper : public TemplateStorageKeeper<Storage>
 {
-	std::shared_ptr<Storage> threadStorage(new Storage());
-	for (int i = 0; i < 100; ++i)
-	{
-		std::thread::id thisThreadId = std::this_thread::get_id();
-		Storage *stor = StorageKeeper::Get().GetStorage();
-		int data = stor->getData();
-		std::cout << "thread " << thisThreadId << "Data:" << data << "\n";
-		stor->setData(++data);
-	}
-}
 
-int main()
-{
-	std::thread t1(foo);
-	std::thread t2(foo);
-
-	t1.join();
-	t2.join();
-
-	return 0;
-}
+};
