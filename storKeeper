@@ -1,13 +1,27 @@
+#include <map>
+#include <thread>
+#include <mutex>
+#include <memory>
+
+
+class Storage;
 
 class StorageKeeper
 {
-	StorageKeeper();
-	~StorageKeeper();
-	Storage* m_tPassInstance;
+	StorageKeeper() {};
+	~StorageKeeper() {};
+	std::mutex classMutex;
+	std::map<std::thread::id, Storage*> m_storages;
 	friend class Storage;
-	void SetTravelPass(Storage* tPassInstance)
+	void AddStorage(Storage* storage)
 	{
-		m_tPassInstance = tPassInstance;
+		std::thread::id thisThreadId = std::this_thread::get_id();
+		classMutex.lock();
+		if (m_storages.count(thisThreadId) == 0)
+		{
+			m_storages[thisThreadId] = storage;
+		}
+		classMutex.unlock();
 	}
 public:
 	static StorageKeeper& Get()
@@ -15,21 +29,52 @@ public:
 		static StorageKeeper singleton;
 		return singleton;
 	}
-	Storage* GetTravelPass() const
+	Storage* GetStorage()
 	{
-		return m_tPassInstance;
+		std::thread::id thisThreadId = std::this_thread::get_id();
+		return m_storages[thisThreadId];
 	}
 };
 
 class Storage
 {
+	int someStore;
 public:
 	Storage()
 	{
-		StorageKeeper::Get().SetTravelPass(this);
+		someStore = 0;
+		StorageKeeper::Get().AddStorage(this);
 	}
 	~Storage()
 	{
-		StorageKeeper::Get().SetTravelPass(nullptr);
+		StorageKeeper::Get().AddStorage(nullptr);
 	}
+
+	void setData(const int i) { someStore = i; };
+	int getData()const { return someStore; };
 };
+
+
+void foo()
+{
+	std::shared_ptr<Storage> threadStorage(new Storage());
+	for (int i = 0; i < 100; ++i)
+	{
+		std::thread::id thisThreadId = std::this_thread::get_id();
+		Storage *stor = StorageKeeper::Get().GetStorage();
+		int data = stor->getData();
+		std::cout << "thread " << thisThreadId << "Data:" << data << "\n";
+		stor->setData(++data);
+	}
+}
+
+int main()
+{
+	std::thread t1(foo);
+	std::thread t2(foo);
+
+	t1.join();
+	t2.join();
+
+	return 0;
+}
