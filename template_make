@@ -1,0 +1,11 @@
+template <typename T>
+struct myclass
+{
+	myclass(const T&) {} 
+};
+
+template <typename T>
+myclass<T> make_myclass(const T& x)
+{
+	return myclass<T>(x);
+}
